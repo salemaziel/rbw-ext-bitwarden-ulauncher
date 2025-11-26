@@ -37,6 +37,20 @@
         "name": "Keyword para desbloquear",
         "description": "Desbloquear o cofre (ex: 'unlock')",
         "default_value": "unlock"
+    },
+    {
+        "id": "clipboard_timeout",
+        "type": "text",
+        "name": "Timeout para limpar clipboard (segundos)",
+        "description": "Após copiar um segredo, ele será limpo do clipboard",
+        "default_value": "15"
+    },
+    {
+        "id": "confirm_password_copy",
+        "type": "text",
+        "name": "Confirmar cópia de senha (true/false)",
+        "description": "Requer confirmação antes de copiar senhas ao clipboard",
+        "default_value": "false"
     }
 ]
 
