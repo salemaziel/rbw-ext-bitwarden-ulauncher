@@ -2,6 +2,7 @@ import gi
 import re
 import json
 import logging
+import shutil
 import subprocess
 
 # Inicializa notificações
@@ -23,6 +24,7 @@ from .note import Note
 from .identity import Identity
 from .tipo_dado import TipoDado
 from .credential import Credential
+from . import card, credential, identity, note, custom_field
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -38,6 +40,14 @@ class KeywordQueryEventListener(EventListener):
         self.extension = extension
         logger.info("Inicializando KeywordQueryEventListener")
         
+        # Resolve rbw binary path to mitigate PATH hijacking
+        self.rbw_path = shutil.which('rbw')
+        if self.rbw_path:
+            logger.info("rbw binary found at: %s", self.rbw_path)
+        else:
+            logger.warning("rbw binary not found in PATH")
+            self.rbw_path = 'rbw'  # Fallback to simple command name
+        
         self.main_extension_kw = extension.preferences.get("main_kw", "bw")
         logger.info(f"Keyword para identificar que a extensão foi ativada: {self.main_extension_kw}")
         
@@ -50,12 +60,25 @@ class KeywordQueryEventListener(EventListener):
         self.unlock_kw = extension.preferences.get("unlock_kw", "unlock")
         logger.info(f"Keyword para desbloquear: {self.unlock_kw}")
         
+        # Get clipboard timeout preference
+        try:
+            self.clipboard_timeout = int(extension.preferences.get("clipboard_timeout", "15"))
+        except (ValueError, TypeError):
+            self.clipboard_timeout = 15
+        
+        # Set the global clipboard timeout for all secure copy actions
+        card.set_clipboard_timeout(self.clipboard_timeout)
+        credential.set_clipboard_timeout(self.clipboard_timeout)
+        identity.set_clipboard_timeout(self.clipboard_timeout)
+        note.set_clipboard_timeout(self.clipboard_timeout)
+        custom_field.set_clipboard_timeout(self.clipboard_timeout)
+        
     def on_event(self, event, extension):
         user_query = (event.get_argument() or "").strip()
         prompt = event.get_query().strip()
 
-        logger.info(f"DEBUG - prompt recebido: '{prompt}'")
-        logger.info(f"DEBUG - user_query: '{user_query}'")
+        logger.debug("Prompt recebido len=%d", len(prompt))
+        logger.debug("User query len=%d", len(user_query))
 
         if not prompt.lower().startswith(f'{self.main_extension_kw.lower()}'):
             return RenderResultListAction([])
@@ -114,7 +137,7 @@ class KeywordQueryEventListener(EventListener):
             
         # 🔍 Verifica se está tentando completar nome de pasta
         match = re.search(r"/([^ /\n]*)$", prompt)
-        logger.info(f"Match encontrado: { prompt }")
+        logger.debug("Checking for folder completion, match=%s", match is not None)
         if match or prompt == f'{ self.main_extension_kw } /':
             nome_potencial_pasta = match.group(1).lower()
             pastas_existentes = set(r['pasta'].lower() for r in self._buscar_registros_raw())
@@ -160,7 +183,7 @@ class KeywordQueryEventListener(EventListener):
 
     def validar_rbw_configurado(self):
         try:
-            result = subprocess.run(['rbw', 'config', 'show'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            result = subprocess.run([self.rbw_path, 'config', 'show'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
             output = result.stdout.decode('utf-8').strip()
 
             for line in output.splitlines():
@@ -170,66 +193,71 @@ class KeywordQueryEventListener(EventListener):
                         logger.info(f"'rbw' configurado corretamente com email: {email}")
                         return True
 
-            self.show_notification("'rbw' n\u00e3o est\u00e1 configurado corretamente.", "Erro")
-        except Exception as e:
-            if 'Arquivo ou diret\u00f3rio inexistente: \'rbw\'' in str(e):
-                self.show_notification("'rbw' n\u00e3o est\u00e1 instalado ou n\u00e3o est\u00e1 no PATH.", "Erro")
-            else:
-                self.show_notification(f"Erro: {str(e)}", "Erro")
+            self.show_notification("'rbw' não está configurado corretamente.", "Erro")
+        except Exception:
+            logger.exception("Erro ao validar configuração do rbw")
+            self.show_notification("Falha ao validar configuração do rbw.", "Erro")
 
         return False
 
     def rbw_bloqueado(self):
         try:
-            subprocess.run(['rbw', 'unlocked'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
-            logger.info("O cofre 'rbw' est\u00e1 desbloqueado.")
+            subprocess.run([self.rbw_path, 'unlocked'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            logger.info("O cofre 'rbw' está desbloqueado.")
             return False
         except subprocess.CalledProcessError as e:
             if 'agent is locked' in e.stderr.decode('utf-8'):
-                logger.info("O cofre 'rbw' est\u00e1 bloqueado.")
+                logger.info("O cofre 'rbw' está bloqueado.")
                 return True
-            self.show_notification(f"Erro ao verificar lock: {e.stderr.decode('utf-8')}", "Erro")
-        except Exception as e:
-            self.show_notification(f"Erro inesperado: {str(e)}", "Erro")
+            logger.exception("Erro ao verificar lock do rbw")
+            self.show_notification("Falha ao verificar estado do cofre.", "Erro")
+        except Exception:
+            logger.exception("Erro inesperado ao verificar lock")
+            self.show_notification("Falha ao verificar estado do cofre.", "Erro")
 
         return False
 
     def bloquear_rbw(self):
-        self._executar_comando(['rbw', 'lock'], "Cofre bloqueado com sucesso!")
+        self._executar_comando([self.rbw_path, 'lock'], "Cofre bloqueado com sucesso!")
 
     def desbloquear_rbw(self):
-        self._executar_comando(['rbw', 'unlock'], "Cofre desbloqueado com sucesso!")
+        self._executar_comando([self.rbw_path, 'unlock'], "Cofre desbloqueado com sucesso!")
 
     def sync_rbw(self):
-        self._executar_comando(['rbw', 'sync'], "Cofre atualizado com sucesso!")
+        self._executar_comando([self.rbw_path, 'sync'], "Cofre atualizado com sucesso!")
 
     def _executar_comando(self, comando, mensagem_sucesso):
         try:
             subprocess.run(comando, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
             self.show_notification(mensagem_sucesso, "Sucesso")
-        except Exception as e:
-            self.show_notification(f"Erro: {str(e)}", "Erro")
+        except Exception:
+            logger.exception("Erro ao executar comando rbw")
+            self.show_notification("Falha ao executar comando.", "Erro")
 
     def get_info(self, item_id):
         try:
-            result = subprocess.run(['rbw', 'get', '--raw', item_id], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            result = subprocess.run([self.rbw_path, 'get', '--raw', item_id], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
             raw_output = result.stdout.decode('utf-8').strip()
+            data = json.loads(raw_output)
 
-            tipo_dado = self.determinar_tipo_objeto(raw_output)
-            logger.info(f"O registro [{ item_id }] = [{tipo_dado}]")
-            items = {
+            tipo_dado = self.determinar_tipo_objeto(data)
+            logger.debug("O registro [%s] = [%s]", item_id, tipo_dado)
+            cls_map = {
                 TipoDado.CREDENCIAL: Credential,
                 TipoDado.CARTAO: Card,
                 TipoDado.IDENTIDADE: Identity
-            }.get(tipo_dado, Note)(raw_output).get_itens()
-            logger.info(f"Quantia de dados retornados: {len(items)}")
+            }
+            items = cls_map.get(tipo_dado, Note)(data).get_itens()
+            logger.debug("Quantia de dados retornados: %d", len(items))
 
             return RenderResultListAction(items)
 
-        except json.JSONDecodeError as e:
-            self.show_notification(f"Erro de JSON: {str(e)}", "Erro")
-        except Exception as e:
-            self.show_notification(f"Erro geral: {str(e)}", "Erro")
+        except json.JSONDecodeError:
+            logger.exception("Erro ao decodificar JSON do item %s", item_id)
+            self.show_notification("Falha ao processar dados do item.", "Erro")
+        except Exception:
+            logger.exception("Erro geral ao obter info do item %s", item_id)
+            self.show_notification("Falha ao obter dados do item.", "Erro")
 
         return RenderResultListAction([])
 
@@ -239,14 +267,16 @@ class KeywordQueryEventListener(EventListener):
             match = re.search(r"/([^ /\n]*)$", user_query_prefix)
             filtro = match.group(1).lower() if match else ""
             
-            logger.info(f"Listando pastas com filtro: '{filtro}'")
+            logger.debug("Listando pastas com filtro len=%d", len(filtro))
 
             result = subprocess.run(
-                "rbw list --fields folder | grep -v '^$' | sort | uniq",
-                shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5
+                [self.rbw_path, 'list', '--fields', 'folder'],
+                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5
             )
-
-            for folder in result.stdout.decode('utf-8').strip().splitlines():
+            
+            # Process folders in pure Python instead of using shell pipeline
+            raw_folders = [f.strip() for f in result.stdout.decode('utf-8').splitlines() if f.strip()]
+            for folder in sorted(set(raw_folders)):
                 folder = folder.strip()
                 if folder.lower().startswith(filtro):
                     new_query = re.sub(r"/[^ /\n]*$", f"/{folder} ", user_query_prefix)
@@ -256,15 +286,19 @@ class KeywordQueryEventListener(EventListener):
                         description=f'Pasta: {folder}',
                         on_enter=SetUserQueryAction(new_query)
                     ))
-        except Exception as e:
-            self.show_notification(f"Erro: {str(e)}", "Erro")
+        except Exception:
+            logger.exception("Erro ao listar pastas")
+            self.show_notification("Falha ao listar pastas.", "Erro")
 
         return items
 
     def _buscar_registros_raw(self, pasta=None, filtro_nome=""):
         registros = []
         try:
-            result = subprocess.run("rbw list --fields name,folder,id", shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            result = subprocess.run(
+                [self.rbw_path, 'list', '--fields', 'name,folder,id'],
+                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5
+            )
             linhas = result.stdout.decode('utf-8').strip().splitlines()
 
             for linha in linhas:
@@ -280,15 +314,16 @@ class KeywordQueryEventListener(EventListener):
                     continue
 
                 registros.append({'nome': nome, 'pasta': pasta_item, 'id': item_id})
-        except Exception as e:
-            self.show_notification(f"Erro: {str(e)}", "Erro")
+        except Exception:
+            logger.exception("Erro ao buscar registros")
+            self.show_notification("Falha ao buscar registros.", "Erro")
 
         return registros
 
     def _buscar_detalhes_item(self, item_id):
         try:
-            result = subprocess.run(['rbw', 'get', '--raw', item_id], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
-            raw_output = result.stdout.decode('utf-8').strip().replace('\\', '\\\\')
+            result = subprocess.run([self.rbw_path, 'get', '--raw', item_id], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5)
+            raw_output = result.stdout.decode('utf-8').strip()
             data = json.loads(raw_output)
 
             tipo_dado = self.determinar_tipo_objeto(data)
@@ -299,8 +334,9 @@ class KeywordQueryEventListener(EventListener):
             }.get(tipo_dado, Note)
 
             return cls(data).get_itens()
-        except Exception as e:
-            self.show_notification(f"Erro ao buscar detalhes: {str(e)}", "Erro")
+        except Exception:
+            logger.exception("Erro ao buscar detalhes do item %s", item_id)
+            self.show_notification("Falha ao buscar detalhes do item.", "Erro")
             return []
 
     def determinar_tipo_objeto(self, obj):

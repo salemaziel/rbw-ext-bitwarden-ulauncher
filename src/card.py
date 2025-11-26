@@ -2,10 +2,20 @@ import json
 from typing import Dict, Any, List
 
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
-from ulauncher.api.shared.action.CopyToClipboardAction import CopyToClipboardAction
 
 from .custom_field import Field
 from .tipo_dado import TipoDado
+from .secure_actions import SecureCopyAction
+
+
+# Global clipboard timeout - will be set by extension
+_clipboard_timeout = 15
+
+
+def set_clipboard_timeout(timeout: int):
+    """Set the global clipboard timeout for secure copy actions."""
+    global _clipboard_timeout
+    _clipboard_timeout = max(5, timeout)
 
 
 class Card:
@@ -38,7 +48,7 @@ class Card:
             items.append(ExtensionResultItem(
                 icon=self.image,
                 name=f"NOME IMPRESSO:   {self.name}",
-                on_enter=CopyToClipboardAction(self.name)
+                on_enter=SecureCopyAction(self.name, _clipboard_timeout)
             ))
 
         # Número do cartão
@@ -46,7 +56,7 @@ class Card:
             items.append(ExtensionResultItem(
                 icon=self.image,
                 name=f"NÚMERO CARTÃO:   {self.number}",
-                on_enter=CopyToClipboardAction(self.number)
+                on_enter=SecureCopyAction(self.number, _clipboard_timeout)
             ))
 
         # Data de expiração (MM/YY)
@@ -57,21 +67,21 @@ class Card:
             items.append(ExtensionResultItem(
                 icon=self.image,
                 name=f"MM/YY:   {month}/{year}",
-                on_enter=CopyToClipboardAction(f"{month}/{year}")
+                on_enter=SecureCopyAction(f"{month}/{year}", _clipboard_timeout)
             ))
 
         elif month:
             items.append(ExtensionResultItem(
                 icon=self.image,
                 name=f"MÊS:   {month}",
-                on_enter=CopyToClipboardAction(month)
+                on_enter=SecureCopyAction(month, _clipboard_timeout)
             ))
 
         elif year:
             items.append(ExtensionResultItem(
                 icon=self.image,
                 name=f"ANO:   {year}",
-                on_enter=CopyToClipboardAction(year)
+                on_enter=SecureCopyAction(year, _clipboard_timeout)
             ))
 
         # CVV
@@ -80,7 +90,7 @@ class Card:
             items.append(ExtensionResultItem(
                 icon=self.image,
                 name=f"CVV:   {masked_cvv}",
-                on_enter=CopyToClipboardAction(self.code.zfill(3))
+                on_enter=SecureCopyAction(self.code.zfill(3), _clipboard_timeout)
             ))
 
         # Notas
@@ -89,7 +99,7 @@ class Card:
             items.append(ExtensionResultItem(
                 icon=self.image,
                 name=f"NOTA:   {display_notes}",
-                on_enter=CopyToClipboardAction(self.notes)
+                on_enter=SecureCopyAction(self.notes, _clipboard_timeout)
             ))
 
         # Campos personalizados

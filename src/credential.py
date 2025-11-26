@@ -2,10 +2,20 @@ import json
 from typing import Dict, Any, List
 
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
-from ulauncher.api.shared.action.CopyToClipboardAction import CopyToClipboardAction
 
 from .tipo_dado import TipoDado
 from .custom_field import Field
+from .secure_actions import SecureCopyAction
+
+
+# Global clipboard timeout - will be set by extension
+_clipboard_timeout = 15
+
+
+def set_clipboard_timeout(timeout: int):
+    """Set the global clipboard timeout for secure copy actions."""
+    global _clipboard_timeout
+    _clipboard_timeout = max(5, timeout)
 
 
 class Credential:
@@ -34,7 +44,7 @@ class Credential:
                 ExtensionResultItem(
                     icon=self.image,
                     name=f"USUÁRIO:   {self.username}",
-                    on_enter=CopyToClipboardAction(self.username),
+                    on_enter=SecureCopyAction(self.username, _clipboard_timeout),
                 )
             )
 
@@ -45,7 +55,7 @@ class Credential:
                 ExtensionResultItem(
                     icon=self.image,
                     name=f"SENHA:   {masked}",
-                    on_enter=CopyToClipboardAction(self.password),
+                    on_enter=SecureCopyAction(self.password, _clipboard_timeout),
                 )
             )
 
@@ -56,7 +66,7 @@ class Credential:
                 ExtensionResultItem(
                     icon=self.image,
                     name=f"NOTA:   {display_notes}",
-                    on_enter=CopyToClipboardAction(self.notes),
+                    on_enter=SecureCopyAction(self.notes, _clipboard_timeout),
                 )
             )
 

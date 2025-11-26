@@ -2,10 +2,20 @@ import json
 from typing import Any, Dict, List
 
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
-from ulauncher.api.shared.action.CopyToClipboardAction import CopyToClipboardAction
 
 from .custom_field import Field
 from .tipo_dado import TipoDado
+from .secure_actions import SecureCopyAction
+
+
+# Global clipboard timeout - will be set by extension
+_clipboard_timeout = 15
+
+
+def set_clipboard_timeout(timeout: int):
+    """Set the global clipboard timeout for secure copy actions."""
+    global _clipboard_timeout
+    _clipboard_timeout = max(5, timeout)
 
 
 class Note:
@@ -36,7 +46,7 @@ class Note:
                 ExtensionResultItem(
                     icon=self.image,
                     name=f"NOTA:   {display_notes}",
-                    on_enter=CopyToClipboardAction(self.notes),
+                    on_enter=SecureCopyAction(self.notes, _clipboard_timeout),
                 )
             )
 

@@ -1,9 +1,19 @@
 from typing import Dict, Any, Optional
 
 from ulauncher.api.shared.item.ExtensionResultItem import ExtensionResultItem
-from ulauncher.api.shared.action.CopyToClipboardAction import CopyToClipboardAction
 
 from .tipo_dado import TipoDado
+from .secure_actions import SecureCopyAction
+
+
+# Global clipboard timeout - will be set by extension
+_clipboard_timeout = 15
+
+
+def set_clipboard_timeout(timeout: int):
+    """Set the global clipboard timeout for secure copy actions."""
+    global _clipboard_timeout
+    _clipboard_timeout = max(5, timeout)
 
 
 class Field:
@@ -22,5 +32,5 @@ class Field:
         return ExtensionResultItem(
             icon=TipoDado.get_icon(self.tipo_dado),
             name=f"{self.name.upper()}:   {display_value}",
-            on_enter=CopyToClipboardAction(self.value)
+            on_enter=SecureCopyAction(self.value, _clipboard_timeout)
         )
