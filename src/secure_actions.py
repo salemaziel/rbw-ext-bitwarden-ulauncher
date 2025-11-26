@@ -1,6 +1,7 @@
 """
 Secure clipboard actions with auto-clear functionality.
 """
+import hashlib
 import logging
 
 import gi
@@ -31,19 +32,22 @@ class SecureCopyAction(BaseAction):
         clipboard.set_text(self.text, -1)
         clipboard.store()
         
+        # Compute hash for comparison to avoid keeping text in memory longer than needed
+        text_hash = hashlib.sha256(self.text.encode('utf-8')).hexdigest()
+        text_length = len(self.text)
+        
         logger.debug(
             "Copied secret to clipboard (len=%d). Will clear in %ds",
-            len(self.text),
+            text_length,
             self.clear_after
         )
-        
-        # Store text reference for comparison when clearing
-        text_to_clear = self.text
         
         def _clear():
             try:
                 current = clipboard.wait_for_text() or ""
-                if current == text_to_clear:
+                # Compare by hash to avoid keeping the original text in memory
+                current_hash = hashlib.sha256(current.encode('utf-8')).hexdigest()
+                if current_hash == text_hash:
                     clipboard.set_text("", -1)
                     clipboard.store()
                     logger.debug("Cleared secret from clipboard")

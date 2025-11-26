@@ -73,10 +73,6 @@ class KeywordQueryEventListener(EventListener):
         note.set_clipboard_timeout(self.clipboard_timeout)
         custom_field.set_clipboard_timeout(self.clipboard_timeout)
         
-        # Get confirm password copy preference
-        confirm_pref = extension.preferences.get("confirm_password_copy", "false")
-        self.confirm_password_copy = confirm_pref.lower() == "true"
-        
     def on_event(self, event, extension):
         user_query = (event.get_argument() or "").strip()
         prompt = event.get_query().strip()
@@ -245,14 +241,14 @@ class KeywordQueryEventListener(EventListener):
             data = json.loads(raw_output)
 
             tipo_dado = self.determinar_tipo_objeto(data)
-            logger.info(f"O registro [{ item_id }] = [{tipo_dado}]")
+            logger.debug("O registro [%s] = [%s]", item_id, tipo_dado)
             cls_map = {
                 TipoDado.CREDENCIAL: Credential,
                 TipoDado.CARTAO: Card,
                 TipoDado.IDENTIDADE: Identity
             }
             items = cls_map.get(tipo_dado, Note)(data).get_itens()
-            logger.info(f"Quantia de dados retornados: {len(items)}")
+            logger.debug("Quantia de dados retornados: %d", len(items))
 
             return RenderResultListAction(items)
 

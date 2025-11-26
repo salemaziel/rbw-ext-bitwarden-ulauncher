@@ -7,7 +7,7 @@ The extension intermediates access to Bitwarden data via the `rbw` CLI. It does 
 Secrets copied to the clipboard are automatically cleared after a configurable timeout (`clipboard_timeout`, default 15s). Users should avoid prolonging clipboard retention or pasting secrets into untrusted applications.
 
 ## Masking
-Passwords, CVV, and document identifiers are masked in the UI. Clicking an item copies the full underlying value. Enable `confirm_password_copy` to require an explicit confirmation step for passwords.
+Passwords, CVV, and document identifiers are masked in the UI. Clicking an item copies the full underlying value.
 
 ## Logging
 User queries and prompts are logged only at DEBUG level and redacted to lengths. Run the extension with appropriate log level to avoid retaining sensitive text.
